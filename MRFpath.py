@@ -9,6 +9,8 @@ import scipy
 #solve関数では普通に解けない
 #from numpy.linalg import solve
 
+#test
+
 #データの読み込み
 data = loadtxt("data.csv", delimiter=',')
 
