@@ -4,12 +4,15 @@ from pylab import *
 
 from numpy import *
 
-import scipy
+import scipy as sci
+import scipy.linalg
+import scipy.sparse as sp
+
+import scipy.sparse.linalg as spla
 
 #solve関数では普通に解けない
 #from numpy.linalg import solve
 
-#test
 
 #データの読み込み
 data = loadtxt("data.csv", delimiter=',')
@@ -20,17 +23,17 @@ data = log(data)
 
 
 p=0.9
-L=3
-M=3
-I=201
+L=2
+M=2
+I=2
 J=2
 
 
-f = ones([201,2,3,3])*log((1-p)/2)
-for i in range(0, 201):
-	for j in range(0,2):
-		for l in range(0,3):
-			for m in range(0,3):
+f = ones([I,J,L,M])*log((1-p)/2)
+for i in range(0, I):
+	for j in range(0,J):
+		for l in range(0,L):
+			for m in range(0,M):
 				if l==m:
 					f[i][j][l][m]=log(p)
 
@@ -40,35 +43,34 @@ fijlm= f.flatten()
 
 
 
-print fijlm.size
-
 c = hstack((dil,fijlm))
 
-print c
 
-print c.shape
-
-
-A = zeros((I+I*J*L*2-6,I*L+I*J*L*M))
+A = zeros((I+I*J*L*2-J*L,I*L+I*J*L*M))
 for i in range(0, I):
-	for j in range(0,2):
-		for l in range(0,3):
+	for j in range(0,J):
+		for l in range(0,L):
 			if j==0:
-				A[i,l+L*i]=1
-			for m in range(0,3):
-				A[l+j*L+i*L*J+I,l+L*i] = -1
+				A[i,l+L*i]=1.0
+			for m in range(0,M):
+				A[l+j*L+i*L*J+I,l+L*i] = -1.0
 
-				A[I+l+L*j+L*J*i,I*L+m+M*l+M*L*j+M*L*J*i]=1
+				A[I+l+L*j+L*J*i,I*L+m+M*l+M*L*j+M*L*J*i]=1.0
 
 				if i!=0 and j==0 :
-					A[I+I*J*L+l+j*L+i*L*J-L,l+L*i-M] = -1
-					A[I+I*J*L+m+L*j+L*J*i-L,I*L+m+M*l+M*L*j+M*L*J*i]=1
+					A[I+I*J*L+l+j*L+i*L*J-L,l+L*i-M] = -1.0
+					A[I+I*J*L+m+L*j+L*J*i-L,I*L+m+M*l+M*L*j+M*L*J*i]=1.0
 				if i != I-1 and j==1:
-					A[I+I*J*L+l+j*L+i*L*J-L,l+L*i+M] = -1
-					A[I+I*J*L+m+M*j+M*J*i-L,I*L+m+M*l+M*L*j+M*L*J*i]=1
-#savetxt("a.csv", A, fmt="%.0f",delimiter=",")
+					A[I+I*J*L+l+j*L+i*L*J-L,l+L*i+M] = -1.0
+					A[I+I*J*L+m+M*j+M*J*i-L,I*L+m+M*l+M*L*j+M*L*J*i]=1.0
 
-#print A.shape
+
+savetxt("a.csv", A, fmt="%.0f",delimiter=",")
+
+
+
+# print "Ashape"
+# print A.shape
 
 b = hstack((ones(I),zeros(I*J*L*2-6)))
 
@@ -120,43 +122,67 @@ print x.shape
 print y.shape
 print z.shape
 
+print "テスト"
+X = diag(asarray(x.T)[0])
+Z = diag(asarray(z.T)[0])
+A00 = hstack((A,zeros((m,m)),zeros((m,n))))
+
+
+ATI = hstack((zeros((n,n)),A.T,eye(n)))
+Z0X = hstack((Z,zeros((n,m)),X))
+
+A_X = vstack((A00,ATI,Z0X))
+
+print linalg.det(A_X)
+
+
+
+
 i=0
 #内点法
-while x.T*z>E or linalg.norm(A*x-b)>Ep or linalg.norm(A.T*y+z-c)>Ed:
+# while x.T*z>E or linalg.norm(A*x-b)>Ep or linalg.norm(A.T*y+z-c)>Ed:
 
-	X = diag(asarray(x.T)[0])
-	Z = diag(asarray(z.T)[0])
-
-
-	myu = ganma * (x.T*z) / n
+# 	X = diag(asarray(x.T)[0])
+# 	Z = diag(asarray(z.T)[0])
 
 
-
-	A00 = hstack((A,zeros((m,m)),zeros((m,n))))
-
-	ATI = hstack((zeros((n,n)),A.T,eye(n)))
-	Z0X = hstack((Z,zeros((n,m)),X))
+# 	myu = ganma * (x.T*z) / n
 
 
 
-	A_X = vstack((A00,ATI,Z0X))
+# 	A00 = hstack((A,zeros((m,m)),zeros((m,n))))
 
 
-	A_myue = vstack((A*x-b,A.T*y+z-c,X*z-ones((n,1))*myu))
-
-
-	i+=1
-	print i
-
-	delta = - solve(A_X.I , A_myue)
-
-	x += delta[:n]
-	y += delta[n:n+m]
-	z += delta[n+m:]
+# 	ATI = hstack((zeros((n,n)),A.T,eye(n)))
+# 	Z0X = hstack((Z,zeros((n,m)),X))
 
 
 
-print "end"
+# 	A_X = vstack((A00,ATI,Z0X))
+
+
+# 	A_myue = vstack((A*x-b,A.T*y+z-c,X*z-ones((n,1))*myu))
+
+
+# 	i+=1
+# 	print i
+
+
+# 	print "success"
+
+# 	delta = - linalg.pinv(A_X)*A_myue
+
+
+# 	print delta.shape
+
+# 	print "success2"
+# 	x += delta[:n]
+# 	y += delta[n:n+m]
+# 	z += delta[n+m:]
+
+
+
+# print "end"
 	#print x.T
 
 	# listx.append(x[0,0])
