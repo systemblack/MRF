@@ -1,6 +1,7 @@
 # coding: UTF-8
 
-from pylab import *
+# from pylab import *
+import matplotlib.pylab as pylab
 
 from numpy import *
 
@@ -19,26 +20,29 @@ data = loadtxt("data.csv", delimiter=',')
 
 
 data = data[:,1:]
+
+
+
 data = log(data)
 
 
 p=0.9
-L=2
-M=2
-I=2
-J=2
+L=3
+M=3
+I=201
+J=1
 
 
-f = ones([I,J,L,M])*log((1-p)/2)
-for i in range(0, I):
-	for j in range(0,J):
+f = ones([I-1,L,M])*log((1-p)/2)
+for i in range(0, I-1):
 		for l in range(0,L):
 			for m in range(0,M):
 				if l==m:
-					f[i][j][l][m]=log(p)
+					f[i][l][m]=log(p)
 
 
 dil=data.flatten()
+
 fijlm= f.flatten()
 
 
@@ -46,37 +50,50 @@ fijlm= f.flatten()
 c = hstack((dil,fijlm))
 
 
-A = zeros((I+I*J*L*2-J*L,I*L+I*J*L*M))
+A = zeros((I+(I-1)*L+(I-1)*(L-1),I*L+(I-1)*L*M))
 for i in range(0, I):
-	for j in range(0,J):
 		for l in range(0,L):
-			if j==0:
-				A[i,l+L*i]=1.0
-			for m in range(0,M):
-				A[l+j*L+i*L*J+I,l+L*i] = -1.0
+			A[i,i*L+l]=1
+			if(i<I-1):
+				A[I+i*L+l,i*L+l]=-1
+				if(l<L-1):
+					A[I+(I-1)*L+i*(L-1)+l,i*L+l+L]=-1
+				for m in range(0,M):
+					A[I+i*L+l,I*L+i*L*M+l*M+m]=1
+					if(m<M-1):
+						A[I+(I-1)*L+i*(L-1)+m,I*L+i*L*M+l+m*L]=1
 
-				A[I+l+L*j+L*J*i,I*L+m+M*l+M*L*j+M*L*J*i]=1.0
-
-				if i!=0 and j==0 :
-					A[I+I*J*L+l+j*L+i*L*J-L,l+L*i-M] = -1.0
-					A[I+I*J*L+m+L*j+L*J*i-L,I*L+m+M*l+M*L*j+M*L*J*i]=1.0
-				if i != I-1 and j==1:
-					A[I+I*J*L+l+j*L+i*L*J-L,l+L*i+M] = -1.0
-					A[I+I*J*L+m+M*j+M*J*i-L,I*L+m+M*l+M*L*j+M*L*J*i]=1.0
 
 
 savetxt("a.csv", A, fmt="%.0f",delimiter=",")
 
 
+uarr, spec, vharr = linalg.svd(A)
+print spec
 
-# print "Ashape"
-# print A.shape
 
-b = hstack((ones(I),zeros(I*J*L*2-6)))
+m=I+(I-1)*L+(I-1)*(L-1)
+n=I*L+(I-1)*L*M
+print n
+print m
 
-x = ones(I*L+I*J*L*M)
-y = ones(I+I*J*L*2-6)
-z = ones(I*L+I*J*L*M)
+
+b = hstack((ones(I),zeros((I-1)*L+(I-1)*(L-1))))
+
+
+# xx=zeros((I-1)*L*M)
+# for i in range(0, I-1):
+# 	xx[L*M*i]=1
+# xxx=zeros(I*L)
+# for i in range(0,I):
+# 	xxx[L*i]=1
+# x = hstack((xxx,xx)) 
+
+# print x
+
+x = ones(n)
+y = ones(m)
+z = ones(n)
 
 
 #初期値やパラメータ，定数行列の設定
@@ -91,10 +108,6 @@ Ed = 0.00001
 # c = matrix([[-1.0],[-1.0],[0.0],[0.0]])
 
 
-m=I+I*J*L*2-6
-n=I*L+I*J*L*M
-print n
-print m
 # x = matrix([[1.0],[1.0],[1.0],[1.0]])
 # y = matrix([[-1.0],[-1.0]])
 # z = matrix([[2.0],[3.0],[1.0],[1.0]])
@@ -122,110 +135,47 @@ print x.shape
 print y.shape
 print z.shape
 
-print "テスト"
-X = diag(asarray(x.T)[0])
-Z = diag(asarray(z.T)[0])
-A00 = hstack((A,zeros((m,m)),zeros((m,n))))
 
-
-ATI = hstack((zeros((n,n)),A.T,eye(n)))
-Z0X = hstack((Z,zeros((n,m)),X))
-
-A_X = vstack((A00,ATI,Z0X))
-
-print linalg.det(A_X)
-
-
-
+print x.T*z
 
 i=0
+
+
+A00 = hstack((A,zeros((m,m)),zeros((m,n))))
+
+ATI = hstack((zeros((n,n)),A.T,eye(n)))
+
+
 #内点法
-# while x.T*z>E or linalg.norm(A*x-b)>Ep or linalg.norm(A.T*y+z-c)>Ed:
+while x.T*z>E or linalg.norm(A*x-b)>Ep or linalg.norm(A.T*y+z-c)>Ed :
+	X = diag(asarray(x.T)[0])
+	Z = diag(asarray(z.T)[0])
 
-# 	X = diag(asarray(x.T)[0])
-# 	Z = diag(asarray(z.T)[0])
+	myu = ganma * (x.T*z) / n
 
+	Z0X = hstack((Z,zeros((n,m)),X))
 
-# 	myu = ganma * (x.T*z) / n
+	A_X = vstack((A00,ATI,Z0X))
 
+	savetxt("ax.csv", A_X, fmt="%.0f",delimiter=",")
 
-
-# 	A00 = hstack((A,zeros((m,m)),zeros((m,n))))
-
-
-# 	ATI = hstack((zeros((n,n)),A.T,eye(n)))
-# 	Z0X = hstack((Z,zeros((n,m)),X))
+	A_myue = vstack((A*x-b,A.T*y+z-c,X*z-ones((n,1))*myu))
 
 
+	#savetxt("a.csv", A, fmt="%.0f",delimiter=",")
 
-# 	A_X = vstack((A00,ATI,Z0X))
-
-
-# 	A_myue = vstack((A*x-b,A.T*y+z-c,X*z-ones((n,1))*myu))
-
-
-# 	i+=1
-# 	print i
+	i+=1
+	print i
 
 
-# 	print "success"
-
-# 	delta = - linalg.pinv(A_X)*A_myue
+	delta = - linalg.inv(A_X)*A_myue*0.6
 
 
-# 	print delta.shape
+	x += delta[:n]
+	y += delta[n:n+m]
+	z += delta[n+m:]
 
-# 	print "success2"
-# 	x += delta[:n]
-# 	y += delta[n:n+m]
-# 	z += delta[n+m:]
+	print x.T*z
 
-
-
-# print "end"
-	#print x.T
-
-	# listx.append(x[0,0])
-	# listy.append(x[1,0])
-
-#プロット
-
-# def f(x,y):
-#     return -x-y
-
-# x = arange(0.1, 2.1, 0.1)
-# y = arange(0.1, 2.1, 0.1)
-# X,Y = meshgrid(x, y)
-
-
-# figure(num=None, figsize=(8, 8), dpi=80, facecolor='w', edgecolor='k')
-
-# axes([0.05, 0.05, 0.9, 0.9])
-
-# contourf(X, Y, f(X, Y), 8, alpha=.65, cmap=cm.gray)
-# C = contour(X, Y, f(X, Y), 8, colors='black', linewidth=.5)
-# clabel(C, inline=1, fontsize=16)
-
-
-# plot(listx,listy,'ro')
-# plot(listx[:],listy[:])
-
-# show()
-
-
-
-# f = ones([100,2,3,3])
-
-# print f.shape
-
-
-# ii=0
-# for i in range(0, 10):
-# 	for j in range(0,2):
-# 		for l in range(0,3):
-# 			for m in range(0,3):
-# 				f[i][j][l][m]=j
-# 				ii+=1
-
-# #print f.flatten()
-# print (f.flatten()).shape
+print x
+print "end"
