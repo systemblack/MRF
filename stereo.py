@@ -17,13 +17,14 @@ import time
 import Image
 
 
-imgL=Image.open("data/tsukuba-imL.png")
-imgR=Image.open("data/tsukuba-imR.png")
+imgL=Image.open("data1/tsukuba-imL.png")
+imgR=Image.open("data1/tsukuba-imR.png")
 
 pixL=imgL.load()
 pixR=imgR.load()
 
-nColors=len(imgL.mode)
+nColors=len(imgL.mode)-1
+
 
 nD=16	#ディスパリティの数＝ラベル数
 
@@ -33,7 +34,7 @@ depth = Image.new('L', (T, S))
 
 depthpix = depth.load()
 
-dsi=ones([S,T,nD])*inf
+dsi=ones([S,T,nD])*255
 
 for s in range(0,S):
 	for t in range(0,T):
@@ -53,7 +54,7 @@ for s in range(0,S):
 					dL=max(0,pixL[t,s][b]-IRmax,IRmin-pixL[t,s][b])
 					dR=max(0,pixR[t2,s][b]-ILmax,ILmin-pixR[t2,s][b])
 					diff = min(dL,dR)
-					sumdiff+=diff*diff
+					sumdiff+=diff
 				dsi[s,t,d]=sumdiff
 print "fin dsi"
 
@@ -88,14 +89,14 @@ for s in range(0,S):
 						Cst[m+l*nD+T_width] *= wx
 					if s<S-1:
 						Cst[m+l*nD+Twidth+S_width] *= wy
+
 print "fin 平滑化項"
 
-c = hstack((dsi,Cst))
+c = hstack((dsi,Cst*20))
 
 print "fin c hstack"
 
-c=sp.lil_matrix(c).T
-
+c=sp.lil_matrix(c)
 
 L=nD
 
@@ -121,17 +122,15 @@ num_5=num5+(S-1)*T*L*(L-1)
 
 
 data=ones(num_5)
-data[:num1]=-data[:num1]
 data[num1:num_5:L+1]=-data[num1:num_5:L+1]
-indices=zeros(num_5,int16)
-indptr= zeros(h5+1,int16)
+indices=zeros(num_5,int32)
+indptr= zeros(h5+1,int32)
 indptr[:h1]=arange(0,num1,L)
 indptr[h1:h5+1]=arange(num1,num_5+L+1,L+1)
 
 ia=ib=ic=idd=ie=0
 
 for s in range(0,S):
-	print s
 	for t in range(0,T):
 		for l in range(0,L):
 			indices[ia]=ia
@@ -167,32 +166,30 @@ for s in range(0,S):
 						indices[ie+num_4]=m*L+xe
 						ie+=1
 
+A=sp.csr_matrix((data,indices,indptr),shape=(h5,w3))
+
 print "fin A"
 
 
-m=h1
+
+m=h5
 n=w3
 
 
 b = hstack((ones(h1),zeros(h5-h1)))
-b = sp.lil_matrix(b).T
 
+print "fin stackb"
 
+b = sp.lil_matrix(b)
 
+print "fin b"
 
+x = ones(n)
+y = ones(m)
+z = ones(n)
 
-x = sp.lil_matrix(ones(n))
-y = sp.lil_matrix(ones(m))
-z = sp.lil_matrix(ones(n))
+print "finlilxyz"
 
-
-
-
-X = sp.lil_matrix((n,n))
-Z = sp.lil_matrix((n,n))
-
-deltaX1 = sp.lil_matrix((n,n))
-deltaZ1 = sp.lil_matrix((n,n))
 
 #初期値やパラメータ，定数行列の設定
 
@@ -200,140 +197,158 @@ E = 0.00000001
 Ep = 0.000000001
 Ed = 0.000000001
 
-
-x=x.T
-y=y.tocsr().T
-z=z.T
-
-print x.T*z
+print "fin csrxyz"
 
 i=0
-AA=sp.lil_matrix((m,n+m))
-A00 = hstack([A,AA])
+AA=sp.csr_matrix((m,n+m))
+
+A00 = sp.hstack([A,AA],format="csr")
+
+print "fin A00"
 
 
-ATI = hstack([sp.lil_matrix((n,n)),A.T,sp.lil_matrix(eye(n))])
+A=A.tocsr()
+b=b.tocsr().T
+c=c.tocsr().T
+
+
+ATI = sp.hstack([sp.csr_matrix((n, n)),A.T,sp.csr_matrix( (ones(n),(range(0,n),range(0,n))), shape=(n,n) )],format="csr")
+
+A00ATI=sp.vstack([A00,ATI],format="csr")
+
+Z0Xrow=range(0,n)*2
+Z0Xcol=hstack([range(0,n)+range(n+m,n+m+n)])
 
 print "start"
 
-A=A.tocsr()
-b=b.tocsr()
-c=c.tocsr()
+xTz=(x.T*z)
 
+Axb=((A*x-b).T*(A*x-b))[0,0]
 
+ATyzc=((A.T*y+z-c).T*(A.T*y+z-c))[0,0]
+
+print xTz,Axb,ATyzc
+print A.shape
 
 #内点法@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-while x.T*z>E or (A*x-b).multiply(A*x-b).sum()>Ep or (A.T*y+z-c).multiply(A.T*y+z-c).sum()>Ed :
-	X.setdiag(x.todense())
-	Z.setdiag(z.todense())
+while xTz>E or Axb>Ep or ATyzc>Ed :
+
+	t1 = time.clock()
+
+	Z0X=sp.csr_matrix( (hstack([z.data,x.data]),(Z0Xrow,Z0Xcol)), shape=(n,n+m+n) )
 
 
-	Z0X = hstack([Z,sp.lil_matrix(zeros((n,m))),X])
+	A_X = sp.vstack([A00ATI,Z0X],format="csr")
 
-	A_X = vstack([A00,ATI,Z0X])
+	A_Xz = sp.vstack([A*x-b,A.T*y+z-c,x.multiply(z)],format="csr")
 
-
-	A_Xz = vstack((A*x-b,A.T*y+z-c,X*z))
 
 	i+=1
 	print i
 
-	A_X = A_X.tocsr()
-
-
 	delta1 = -spla.spsolve(A_X,A_Xz)
-	
 
 	deltax1=delta1[:n]
 	deltay1=delta1[n:n+m]
 	deltaz1=delta1[n+m:]
 
 
-
-	deltax1 = sp.lil_matrix(deltax1).T
-	deltay1 = sp.lil_matrix(deltay1).T
-	deltaz1 = sp.lil_matrix(deltaz1).T
+	t2=time.clock()
+	print t2-t1,
 
 	ap1=float("inf")
-
-	ap1x=-(x/deltax1).todense()
+	ap1x=-(x/deltax1)
 	for j in range(0, n):
-	  	if 0<ap1x[j][0]<ap1 :
-			ap1=ap1x[j][0]
+	  	if 0<ap1x[j]<ap1 :
+			ap1=ap1x[j]
+	if ap1==inf:
+		ap1=0
 
 
 	ad1=float("inf")
-	ad1z=-(z/deltaz1).todense()
+	ad1z=-(z/deltaz1)
 	for j in range(0, n):
-	  	if 0<ad1z[j][0]<ad1 :
-			ad1=ad1z[j][0]
-
-
-	gamma=((x+deltax1*ap1).T*(z+deltaz1*ad1)/(x.T*z).todense())**3
-
-
-
-	myu = (x.T*z).todense()/n*gamma
+	  	if 0<ad1z[j]<ad1 :
+			ad1=ad1z[j]
+	if ad1==inf:
+		ad1=0
 
 
 
-	deltaX1.setdiag(deltax1.todense())
+	t22=time.clock()
+	print t22-t2,
 
 
-	DeltaXz = sp.lil_matrix(deltaX1*deltaz1-sp.lil_matrix(ones(n)).T*myu)
+	gamma=(((x+deltax1*ap1)*(z+deltaz1*ad1)).sum()/(xTz))**3
+
+
+	myu = xTz/n*gamma
+
+
+	DeltaXz = (deltax1*deltaz1)-(ones(n)*myu)
+
+	zero_X = sp.vstack([sp.lil_matrix((n+m,1)),sp.lil_matrix(DeltaXz).T],format="csr")
 	
-
-
-	zero_X = vstack([sp.lil_matrix((n+m,1)),DeltaXz])
-
-
 	delta2 = -spla.spsolve(A_X,zero_X)
+
+	t3=time.clock()
+	print t3-t22,
 
 	delta = delta1+delta2
 
 
+	deltax = delta[:n].T
+	deltay = delta[n:n+m].T
+	deltaz = delta[n+m:].T
 
-	deltax = delta[:n]
-	deltay = delta[n:n+m]
-	deltaz = delta[n+m:]
-
-	deltax = sp.lil_matrix(deltax).T
-	deltay = sp.lil_matrix(deltay).T
-	deltaz = sp.lil_matrix(deltaz).T
+	deltax = sp.csr_matrix(sp.lil_matrix(deltax))
+	deltay = sp.csr_matrix(sp.lil_matrix(deltay))
+	deltaz = sp.csr_matrix(sp.lil_matrix(deltaz))
 
 	ap2=float("inf")
-	ap2x=-(x/deltax).todense()
+	ap2x=-(x/deltax.data)
 	for j in range(0, n):
-	  	if 0<ap2x[j][0]<ap2:
-			ap2=ap2x[j][0]
+	  	if 0<ap2x[j]<ap2:
+			ap2=ap2x[j]
 
 	if ap2==inf:
-		ap2=sp.lil_matrix((1,1))
+		ap2=0
+
 
 	ad2=float("inf")
-	ad2z=-(z/deltaz).todense()
+	ad2z=-(z.data/deltaz.data)
 	for j in range(0, n):
-	  	if 0<ad2z[j][0]<ad2 :
-			ad2=ad2z[j][0]
+	  	if 0<ad2z[j]<ad2:
+			ad2=ad2z[j]
 
 	if ad2==inf:
-		ad2=sp.lil_matrix((1,1))
+		ad2=0
 
 
-	ap = ap2[0,0]*0.99 if ap2[0,0]*0.99<1  else 1.0
+	ap = ap2*0.99 if ap2*0.99<1  else 1.0
 
-	ad = ad2[0,0]*0.99 if ad2[0,0]*0.99<1  else 1.0
-
-	x = x+deltax*ap
-	y = y+deltay*ad
-	z = z+deltaz*ad
+	ad = ad2*0.99 if ad2*0.99<1  else 1.0
 
 
-	print x.T*z,
-
-	print (A*x-b).multiply(A*x-b).sum() ,
-
-	print (A.T*y+z-c).multiply(A.T*y+z-c).sum()
+	deltax.data=deltax.data*ap
+	deltay.data=deltay.data*ad
+	deltaz.data=deltaz.data*ad
 
 
+	x = x+deltax.T
+	y = y+deltay.T
+	z = z+deltaz.T
+
+
+	xTz=(x.T*z)[0,0]
+
+	Axb=((A*x-b).T*(A*x-b))[0,0]
+
+	ATyzc=((A.T*y+z-c).T*(A.T*y+z-c))[0,0]
+
+	t4=time.clock()
+	print t4-t3
+
+	print xTz,Axb,ATyzc
 print "end"
+print x
