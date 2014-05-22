@@ -15,6 +15,7 @@ from numpy.random import rand
 from numpy import genfromtxt
 import time
 import Image
+import sys
 
 
 imgL=Image.open("data1/tsukuba-imL.png")
@@ -96,8 +97,6 @@ c = hstack((dsi,Cst*20))
 
 print "fin c hstack"
 
-c=sp.lil_matrix(c)
-
 L=nD
 
 h1=S*T
@@ -178,10 +177,6 @@ n=w3
 
 b = hstack((ones(h1),zeros(h5-h1)))
 
-print "fin stackb"
-
-b = sp.lil_matrix(b)
-
 print "fin b"
 
 x = ones(n)
@@ -208,8 +203,6 @@ print "fin A00"
 
 
 A=A.tocsr()
-b=b.tocsr().T
-c=c.tocsr().T
 
 
 ATI = sp.hstack([sp.csr_matrix((n, n)),A.T,sp.csr_matrix( (ones(n),(range(0,n),range(0,n))), shape=(n,n) )],format="csr")
@@ -221,26 +214,33 @@ Z0Xcol=hstack([range(0,n)+range(n+m,n+m+n)])
 
 print "start"
 
-xTz=(x.T*z)
+xTz=(x)[newaxis, :].dot((z)[:, newaxis])
 
-Axb=((A*x-b).T*(A*x-b))[0,0]
+# Axb=((A*x-b).T*(A*x-b))[0,0]
 
-ATyzc=((A.T*y+z-c).T*(A.T*y+z-c))[0,0]
+# ATyzc=((A.T*y+z-c).T*(A.T*y+z-c))[0,0]
 
-print xTz,Axb,ATyzc
+# print xTz,Axb,ATyzc
 print A.shape
+print xTz
+xTz=(x)[newaxis, :].dot((z)[:, newaxis])
+Axb=A*x-b
+ATyzc=A.T*y+z-c
+Axb2= (Axb)[newaxis, :].dot((Axb)[:, newaxis])
+ATyzc2= (ATyzc)[newaxis, :].dot((ATyzc)[:, newaxis])
+
 
 #内点法@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-while xTz>E or Axb>Ep or ATyzc>Ed :
+while xTz>E or Axb2>Ep or ATyzc2>Ed :
 
 	t1 = time.clock()
 
-	Z0X=sp.csr_matrix( (hstack([z.data,x.data]),(Z0Xrow,Z0Xcol)), shape=(n,n+m+n) )
+	Z0X=sp.csr_matrix( (hstack([z,x]),(Z0Xrow,Z0Xcol)), shape=(n,n+m+n) )
 
 
 	A_X = sp.vstack([A00ATI,Z0X],format="csr")
 
-	A_Xz = sp.vstack([A*x-b,A.T*y+z-c,x.multiply(z)],format="csr")
+	A_Xz = hstack([Axb,ATyzc,x*z])
 
 
 	i+=1
@@ -287,7 +287,9 @@ while xTz>E or Axb>Ep or ATyzc>Ed :
 
 	DeltaXz = (deltax1*deltaz1)-(ones(n)*myu)
 
-	zero_X = sp.vstack([sp.lil_matrix((n+m,1)),sp.lil_matrix(DeltaXz).T],format="csr")
+	# zero_X = sp.vstack([sp.lil_matrix((n+m,1)),sp.lil_matrix(DeltaXz).T],format="csr")
+
+	zero_X = hstack(zeros(n+m),deltaXz)
 	
 	delta2 = -spla.spsolve(A_X,zero_X)
 
@@ -301,12 +303,9 @@ while xTz>E or Axb>Ep or ATyzc>Ed :
 	deltay = delta[n:n+m].T
 	deltaz = delta[n+m:].T
 
-	deltax = sp.csr_matrix(sp.lil_matrix(deltax))
-	deltay = sp.csr_matrix(sp.lil_matrix(deltay))
-	deltaz = sp.csr_matrix(sp.lil_matrix(deltaz))
 
 	ap2=float("inf")
-	ap2x=-(x/deltax.data)
+	ap2x=-(x/deltax)
 	for j in range(0, n):
 	  	if 0<ap2x[j]<ap2:
 			ap2=ap2x[j]
@@ -316,7 +315,7 @@ while xTz>E or Axb>Ep or ATyzc>Ed :
 
 
 	ad2=float("inf")
-	ad2z=-(z.data/deltaz.data)
+	ad2z=-(z/deltaz)
 	for j in range(0, n):
 	  	if 0<ad2z[j]<ad2:
 			ad2=ad2z[j]
@@ -330,21 +329,16 @@ while xTz>E or Axb>Ep or ATyzc>Ed :
 	ad = ad2*0.99 if ad2*0.99<1  else 1.0
 
 
-	deltax.data=deltax.data*ap
-	deltay.data=deltay.data*ad
-	deltaz.data=deltaz.data*ad
+	x = x+deltax*ap
+	y = y+deltay*ad
+	z = z+deltaz*ad
 
 
-	x = x+deltax.T
-	y = y+deltay.T
-	z = z+deltaz.T
-
-
-	xTz=(x.T*z)[0,0]
-
-	Axb=((A*x-b).T*(A*x-b))[0,0]
-
-	ATyzc=((A.T*y+z-c).T*(A.T*y+z-c))[0,0]
+	xTz=(x)[newaxis, :].dot((z)[:, newaxis])
+	Axb=A*x-b
+	ATyzc=A.T*y+z-c
+	Axb2= (Axb)[newaxis, :].dot((Axb)[:, newaxis])
+	ATyzc2= (ATyzc)[newaxis, :].dot((ATyzc)[:, newaxis])
 
 	t4=time.clock()
 	print t4-t3
